@@ -3,7 +3,6 @@ import React from "react";
 import prettyBytes from "pretty-bytes";
 
 import {
-  Button,
   ButtonVariant,
   Card,
   CardBody,
@@ -24,6 +23,7 @@ import PenIcon from "@patternfly/react-icons/dist/esm/icons/pen-icon";
 
 import type { SbomSummary } from "@app/client";
 import { LabelsAsList } from "@app/components/LabelsAsList";
+import { ReadOnlyButton } from "@app/components/ReadOnlyButton";
 import { formatDate } from "@app/utils/utils";
 
 import { SBOMEditLabelsForm } from "../sbom-list/components/SBOMEditLabelsForm";
@@ -81,9 +81,15 @@ export const Overview: React.FC<InfoProps> = ({ sbom }) => {
                   </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>Creator</DescriptionListTerm>
-                  <DescriptionListDescription aria-label="SBOM's creator">
-                    {sbom.suppliers}
+                  <DescriptionListTerm>Supplier</DescriptionListTerm>
+                  <DescriptionListDescription aria-label="SBOM's supplier">
+                    {sbom.suppliers.join(", ")}
+                  </DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
+                  <DescriptionListTerm>Author</DescriptionListTerm>
+                  <DescriptionListDescription aria-label="SBOM's author">
+                    {sbom.authors.join(", ")}
                   </DescriptionListDescription>
                 </DescriptionListGroup>
               </DescriptionList>
@@ -110,7 +116,7 @@ export const Overview: React.FC<InfoProps> = ({ sbom }) => {
                 <DescriptionListGroup>
                   <DescriptionListTerm>
                     Labels {""}
-                    <Button
+                    <ReadOnlyButton
                       variant={ButtonVariant.link}
                       size="sm"
                       icon={<PenIcon />}
@@ -118,7 +124,7 @@ export const Overview: React.FC<InfoProps> = ({ sbom }) => {
                       onClick={() => setShowEditLabels(true)}
                     >
                       Edit
-                    </Button>
+                    </ReadOnlyButton>
                   </DescriptionListTerm>
                   <DescriptionListDescription>
                     <Card isCompact>

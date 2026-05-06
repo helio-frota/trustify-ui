@@ -37,6 +37,10 @@ import {
 } from "@app/components/ConfirmDialog";
 import { NotificationsContext } from "@app/components/NotificationsContext";
 import {
+  readOnlyActionProps,
+  useReadOnlyContext,
+} from "@app/components/ReadOnlyContext";
+import {
   useFetchImporterReports,
   useFetchImporters,
   useUpdateImporterMutation,
@@ -64,6 +68,7 @@ import { useLocalTableControls } from "@app/hooks/table-controls";
 import { ANSICOLOR } from "@app/Constants";
 import { ImporterProgress } from "./components/importer-progress";
 import { ImporterStatusIcon } from "./components/importer-status-icon";
+import { DocumentMetadata } from "@app/components/DocumentMetadata";
 
 type ImporterStatus = "disabled" | "scheduled" | "running";
 
@@ -82,6 +87,7 @@ const getImporterStatus = (importer: Importer): ImporterStatus => {
 
 export const ImporterList: React.FC = () => {
   const { pushNotification } = React.useContext(NotificationsContext);
+  const { isReadOnly } = useReadOnlyContext();
 
   // Actions that each row can trigger
   type RowAction = "enable" | "disable" | "run";
@@ -276,6 +282,7 @@ export const ImporterList: React.FC = () => {
 
   return (
     <>
+      <DocumentMetadata title="Importers" />
       <PageSection hasBodyWrapper={false}>
         <Content>
           <Content component="h1">Importers</Content>
@@ -283,7 +290,7 @@ export const ImporterList: React.FC = () => {
       </PageSection>
       <PageSection hasBodyWrapper={false}>
         <div>
-          <Toolbar {...toolbarProps}>
+          <Toolbar {...toolbarProps} aria-label="importer-toolbar">
             <ToolbarContent>
               <FilterToolbar showFiltersSideBySide {...filterToolbarProps} />
               <ToolbarItem {...paginationToolbarItemProps}>
@@ -390,6 +397,7 @@ export const ImporterList: React.FC = () => {
                                       onClick: () => {
                                         prepareActionOnRow("enable", item);
                                       },
+                                      ...readOnlyActionProps(isReadOnly),
                                     },
                                   ]
                                 : [
@@ -398,13 +406,17 @@ export const ImporterList: React.FC = () => {
                                       onClick: () => {
                                         prepareActionOnRow("run", item);
                                       },
-                                      isDisabled: importerStatus === "running",
+                                      isAriaDisabled:
+                                        isReadOnly ||
+                                        importerStatus === "running",
+                                      ...readOnlyActionProps(isReadOnly),
                                     },
                                     {
                                       title: "Disable",
                                       onClick: () => {
                                         prepareActionOnRow("disable", item);
                                       },
+                                      ...readOnlyActionProps(isReadOnly),
                                     },
                                   ]),
                             ]}
@@ -657,7 +669,6 @@ export const ImporterExpandedArea: React.FC<ImporterExpandedAreaProps> = ({
           numRenderedColumns={numRenderedColumns}
         >
           {currentPageItems?.map((item, rowIndex) => {
-            // biome-ignore lint/correctness/noNestedComponentDefinitions: allowed as Patternfly requires id
             const LogButton = ({ children }: { children: React.ReactNode }) => {
               if (item.messages) {
                 return (

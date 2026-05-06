@@ -20,6 +20,10 @@ import type { SbomSummary } from "@app/client";
 import { ConfirmDialog } from "@app/components/ConfirmDialog";
 import { LabelsAsList } from "@app/components/LabelsAsList";
 import { NotificationsContext } from "@app/components/NotificationsContext";
+import {
+  readOnlyActionProps,
+  useReadOnlyContext,
+} from "@app/components/ReadOnlyContext";
 import { SimplePagination } from "@app/components/SimplePagination";
 import {
   ConditionalTableBody,
@@ -42,9 +46,18 @@ import { SbomSearchContext } from "./sbom-context";
 
 export const SbomTable: React.FC = () => {
   const { pushNotification } = React.useContext(NotificationsContext);
+  const { isReadOnly } = useReadOnlyContext();
 
-  const { isFetching, fetchError, totalItemCount, tableControls } =
-    React.useContext(SbomSearchContext);
+  const {
+    isFetching,
+    fetchError,
+    totalItemCount,
+    tableControls,
+    bulkSelection: {
+      isEnabled: showBulkSelector,
+      controls: bulkSelectionControls,
+    },
+  } = React.useContext(SbomSearchContext);
 
   const [editLabelsModalState, setEditLabelsModalState] =
     React.useState<SbomSummary | null>(null);
@@ -64,6 +77,10 @@ export const SbomTable: React.FC = () => {
     expansionDerivedState: { isCellExpanded },
     filterState: { filterValues, setFilterValues },
   } = tableControls;
+
+  const {
+    propHelpers: { getSelectCheckboxTdProps },
+  } = bulkSelectionControls;
 
   const { downloadSBOM, downloadSBOMLicenses } = useDownload();
 
@@ -123,6 +140,9 @@ export const SbomTable: React.FC = () => {
                 <Tr {...getTrProps({ item })}>
                   <TableRowContentWithControls
                     {...tableControls}
+                    getSelectCheckboxTdProps={
+                      showBulkSelector ? getSelectCheckboxTdProps : undefined
+                    }
                     item={item}
                     rowIndex={rowIndex}
                   >
@@ -212,6 +232,7 @@ export const SbomTable: React.FC = () => {
                             onClick: () => {
                               setEditLabelsModalState(item);
                             },
+                            ...readOnlyActionProps(isReadOnly),
                           },
                           {
                             isSeparator: true,
@@ -236,6 +257,7 @@ export const SbomTable: React.FC = () => {
                             onClick: () => {
                               setSbomToDelete(item);
                             },
+                            ...readOnlyActionProps(isReadOnly),
                           },
                         ]}
                       />
@@ -281,7 +303,7 @@ export const SbomTable: React.FC = () => {
         onClose={() => setSbomToDelete(null)}
         onConfirm={() => {
           if (sbomToDelete) {
-            deleteSbom(sbomToDelete.id);
+            deleteSbom(sbomToDelete);
           }
         }}
       />

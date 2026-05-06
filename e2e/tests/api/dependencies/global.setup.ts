@@ -1,15 +1,9 @@
-import fs from "node:fs";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 
-import type { AxiosInstance } from "axios";
-
-import {
-  ADVISORY_FILES,
-  logger,
-  SBOM_FILES,
-  SETUP_TIMEOUT,
-} from "../../common/constants";
+import { logger, SETUP_TIMEOUT } from "../../common/constants";
 import { test as setup } from "../fixtures";
+import { uploadFiles } from "../helpers/general-helpers";
 
 setup.describe("Ingest initial data", () => {
   setup.skip(
@@ -21,40 +15,34 @@ setup.describe("Ingest initial data", () => {
     setup.setTimeout(SETUP_TIMEOUT);
 
     logger.info("Setup: start uploading assets");
-    await uploadSboms(axios, SBOM_FILES);
-    await uploadAdvisories(axios, ADVISORY_FILES);
+
+    const SBOM_FILES = await readDirectoryRecursively(
+      path.join(__dirname, "../../common/dataset/sbom"),
+    );
+    const ADVISORY_FILES = await readDirectoryRecursively(
+      path.join(__dirname, "../../common/dataset/advisory"),
+    );
+
+    await uploadFiles(axios, "sbom", SBOM_FILES);
+    await uploadFiles(axios, "advisory", ADVISORY_FILES);
+
     logger.info("Setup: upload finished successfully");
   });
 });
 
-const uploadSboms = async (axios: AxiosInstance, files: string[]) => {
-  const uploads = files.map((e) => {
-    const filePath = path.join(__dirname, `../../common/assets/sbom/${e}`);
-    fs.statSync(filePath); // Verify file exists
-    const fileStream = fs.createReadStream(filePath);
-    const contentType = e.endsWith(".bz2")
-      ? "application/json+bzip2"
-      : "application/json";
-    return axios.post("/api/v2/sbom", fileStream, {
-      headers: { "Content-Type": contentType },
-    });
-  });
+const readDirectoryRecursively = async (dir: string) => {
+  const result: string[] = [];
 
-  await Promise.all(uploads);
-};
+  const directoryFiles = await readdir(dir, { withFileTypes: true });
+  for (const file of directoryFiles) {
+    const filePath = path.join(dir, file.name);
+    if (file.isDirectory()) {
+      const subDirectoryFiles = await readDirectoryRecursively(filePath);
+      result.push(...subDirectoryFiles);
+    } else {
+      result.push(filePath);
+    }
+  }
 
-const uploadAdvisories = async (axios: AxiosInstance, files: string[]) => {
-  const uploads = files.map((e) => {
-    const filePath = path.join(__dirname, `../../common/assets/csaf/${e}`);
-    fs.statSync(filePath); // Verify file exists
-    const fileStream = fs.createReadStream(filePath);
-    const contentType = e.endsWith(".bz2")
-      ? "application/json+bzip2"
-      : "application/json";
-    return axios.post("/api/v2/advisory", fileStream, {
-      headers: { "Content-Type": contentType },
-    });
-  });
-
-  await Promise.all(uploads);
+  return result;
 };

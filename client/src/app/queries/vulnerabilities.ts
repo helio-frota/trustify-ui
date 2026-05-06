@@ -7,6 +7,7 @@ import {
   type AnalysisResponse,
   analyze,
   getVulnerability,
+  type GetVulnerabilityData,
   listVulnerabilities,
 } from "@app/client";
 import { requestParamsQuery } from "@app/hooks/table-controls";
@@ -88,11 +89,23 @@ export const useFetchVulnerabilitiesByPackageIds = (ids: string[]) => {
   };
 };
 
-export const useFetchVulnerabilityById = (id: string) => {
-  const { data, isLoading, error } = useQuery({
-    queryKey: [VulnerabilitiesQueryKey, id],
-    queryFn: () => getVulnerability({ client, path: { id } }),
-  });
+const DEFAULT_QUERY: GetVulnerabilityData["query"] = {};
+
+export const vulnerabilityByIdQueryOptions = (
+  id: string,
+  query: GetVulnerabilityData["query"] = DEFAULT_QUERY,
+) => ({
+  queryKey: [VulnerabilitiesQueryKey, id, query],
+  queryFn: () => getVulnerability({ client, path: { id }, query }),
+});
+
+export const useFetchVulnerabilityById = (
+  id: string,
+  query: GetVulnerabilityData["query"] = DEFAULT_QUERY,
+) => {
+  const { data, isLoading, error } = useQuery(
+    vulnerabilityByIdQueryOptions(id, query),
+  );
   return {
     vulnerability: data?.data,
     isFetching: isLoading,

@@ -1,11 +1,14 @@
 import { createBdd } from "playwright-bdd";
-import { expect } from "playwright/test";
 
 import { test } from "../../fixtures";
+
+import { expect } from "../../assertions";
+
+import { ToolbarTable } from "../../helpers/ToolbarTable";
+
 import { SbomListPage } from "../../pages/sbom-list/SbomListPage";
 import { SbomScanPage } from "../../pages/sbom-scan/SbomScanPage";
 import { Table } from "../../pages/Table";
-import { ToolbarTable } from "../../helpers/ToolbarTable";
 import {
   clickAndVerifyDownload,
   verifyChildElementsText,
@@ -18,21 +21,19 @@ When("User Navigates to SBOMs List page", async ({ page }) => {
 });
 
 When("User Clicks Generate Vulnerability Button", async ({ page }) => {
-  // The toolbar button label comes from client/src/app/pages/sbom-list/sbom-toolbar.tsx
-  await page
-    .getByRole("button", { name: "Generate vulnerability report" })
-    .click();
+  const sbomListPage = await SbomListPage.build(page);
+  const toolbar = await sbomListPage.getToolbar();
+  await toolbar.clickKebabAction("Generate vulnerability report");
 });
 
 Then(
   "The Application should navigate to Generate Vulnerability Report screen",
   async ({ page }) => {
     await expect(page).toHaveURL(/\/sboms\/scan$/);
-    await expect(
-      page.locator(
-        `xpath=//h1[contains(text(),'Generate vulnerability report')]`,
-      ),
-    ).toBeVisible();
+    const scanPage = await SbomScanPage.build(page);
+    await expect(scanPage.heading).toContainText(
+      "Generate vulnerability report",
+    );
   },
 );
 
@@ -40,9 +41,8 @@ Then(
   "The Page should contain Browse files option and instruction to Drag and drop files",
   async ({ page }) => {
     // From UploadFileForAnalysis.tsx browseButtonText="Browse Files" and titleText="Drag and drop files here"
-    await expect(
-      page.getByRole("button", { name: "Browse Files" }),
-    ).toBeVisible();
+    const scanPage = await SbomScanPage.build(page);
+    await expect(scanPage.browseFilesButton).toBeVisible();
     await expect(page.getByText("Drag and drop files here")).toBeVisible();
   },
 );
@@ -51,16 +51,16 @@ Given(
   "User Navigated to Generate Vulnerability Report screen",
   async ({ page }) => {
     // Direct navigation via sidebar to SBOMs then click action button
-    await SbomListPage.build(page);
-    await page
-      .getByRole("button", { name: "Generate vulnerability report" })
-      .click();
+    const sbomListPage = await SbomListPage.build(page);
+    const toolbar = await sbomListPage.getToolbar();
+    await toolbar.clickKebabAction("Generate vulnerability report");
     await expect(page).toHaveURL(/\/sboms\/scan$/);
   },
 );
 
 When("User Clicks on Browse files Button", async ({ page }) => {
-  await page.getByRole("button", { name: "Browse Files" }).click();
+  const scanPage = await SbomScanPage.build(page);
+  await scanPage.browseFilesButton.click();
 });
 
 When(
@@ -71,11 +71,26 @@ When(
   },
 );
 
-Then(
-  "The Page should have a spinner with {string} message and {string} option while processing the SBOM",
-  async ({ page }, header: string, cancelLabel: string) => {
+When(
+  "User Cancels the vulnerability report generation by clicking {string} with {string} message",
+  async ({ page }, cancelLabel: string, header: string) => {
     const scanPage = await SbomScanPage.build(page);
-    await scanPage.expectProcessingSpinner(header, cancelLabel);
+
+    // Block all API requests to keep the page in processing state long enough to click cancel
+    await page.route("**/api/**", async (route) => {
+      // Delay the response for 10 seconds - hopefully more than enough time to click cancel
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+      await route.continue();
+    });
+
+    try {
+      // Verify spinner and click cancel while requests are blocked
+      await scanPage.expectProcessingSpinner(header, cancelLabel);
+      await scanPage.clickCancelProcessing(cancelLabel);
+    } finally {
+      // Always clean up the route to prevent it from leaking into other tests
+      await page.unroute("**/api/**");
+    }
   },
 );
 
@@ -102,11 +117,28 @@ Then(
 
 Then(
   "Tooltip on the {string} column should display {string}",
-  async ({ page }, column: string, tooltipMessage: string) => {
-    const table = await Table.build(page, "Vulnerability table");
+  // biome-ignore lint/suspicious/noExplicitAny: allowed
+  async ({ page }, column: any, tooltipMessage: string) => {
+    const table = await Table.build(
+      page,
+      "Vulnerability table",
+      [
+        "Vulnerability ID",
+        "Description",
+        "Severity",
+        "Status",
+        "Affected packages",
+        "Published",
+        "Updated",
+      ],
+      [],
+    );
     const tooltipButton = table.getColumnTooltipButton(column, tooltipMessage);
     await tooltipButton.hover();
-    await page.waitForTimeout(500);
+    // Wait for the specific tooltip with expected message to become visible
+    await expect(
+      page.getByRole("tooltip", { name: tooltipMessage }),
+    ).toBeVisible();
   },
 );
 
@@ -143,20 +175,14 @@ When("User Clicks on {string} button", async ({ page }, buttonName: string) => {
   await page.getByRole("button", { name: buttonName }).click();
 });
 
-When("User Clicks on {string} link", async ({ page }, cancelLabel: string) => {
-  const scanPage = await SbomScanPage.build(page);
-  await scanPage.clickCancelProcessing(cancelLabel);
-});
-
 Then(
   "Application navigates to Generate Vulnerability Report screen",
   async ({ page }) => {
     await expect(page).toHaveURL(/\/sboms\/scan$/);
-    await expect(
-      page.locator(
-        `xpath=//h1[contains(text(),'Generate vulnerability report')]`,
-      ),
-    ).toBeVisible();
+    const scanPage = await SbomScanPage.build(page);
+    await expect(scanPage.heading).toContainText(
+      "Generate vulnerability report",
+    );
   },
 );
 
@@ -212,11 +238,11 @@ Then(
     }
 
     // Verify each expected ID is present at least once
-    for (const id of expectedIds) {
-      await expect
-        .soft(collectedIds, `Missing expected id: ${id}`)
-        .toContain(id);
-    }
+    const missingIds = expectedIds.filter((id) => !collectedIds.includes(id));
+    expect(
+      missingIds.length,
+      `Missing expected IDs: ${missingIds.join(", ")}. Found: ${collectedIds.join(", ")}`,
+    ).toBe(0);
   },
 );
 
@@ -315,11 +341,9 @@ When(
 );
 
 Then("Affected Package table should expand", async ({ page }) => {
-  // Wait for the expanded content to appear
-  await page.waitForTimeout(500);
   // Look for the nested grid with column headers Type, Namespace, etc.
-  // The expanded table has columnheader elements
-  const typeHeader = page.locator('role=columnheader[name="Type"]');
+  // The expanded table has columnheader elements - Playwright auto-waits for visibility
+  const typeHeader = page.getByRole("columnheader", { name: "Type" });
   await expect(typeHeader).toBeVisible();
 });
 
@@ -402,10 +426,8 @@ Then(
 Then(
   "A modal window should open with {string} message",
   async ({ page }, message: string) => {
-    // Wait for modal dialog to appear
-    await page.waitForTimeout(500);
-    // Check for modal with the message
-    const modal = page.locator('[role="dialog"]');
+    // Check for modal with the message - Playwright auto-waits for visibility
+    const modal = page.getByRole("dialog");
     await expect(modal).toBeVisible();
     await expect(modal.getByText(message)).toBeVisible();
   },
@@ -414,8 +436,7 @@ Then(
 When(
   "User Clicks on {string} button from the modal window",
   async ({ page }, buttonName: string) => {
-    const modal = page.locator('[role="dialog"]');
-    // Just click for non-download actions
+    const modal = page.getByRole("dialog");
     await modal.getByRole("button", { name: buttonName }).click();
   },
 );
@@ -423,13 +444,13 @@ When(
 When(
   "User Downloads CSV with default filename {string} and Leaves by clicking on {string} button from the modal window",
   async ({ page }, fileName: string, buttonName: string) => {
-    const modal = page.locator('[role="dialog"]');
+    const modal = page.getByRole("dialog");
     // Use the reusable helper for click + download verification
     const downloadedFileName = await clickAndVerifyDownload(page, () =>
       modal.getByRole("button", { name: buttonName }).click(),
     );
-    await expect(downloadedFileName).toContain(fileName);
-    await expect(downloadedFileName.endsWith(".csv")).toBeTruthy();
+    expect(downloadedFileName).toContain(fileName);
+    expect(downloadedFileName.endsWith(".csv")).toBeTruthy();
   },
 );
 
@@ -497,23 +518,5 @@ Then(
     } else {
       await expect(cell).toContainText(expected);
     }
-  },
-);
-
-Then("Pagination of Vulnerability list works", async ({ page }) => {
-  const parentElem = `xpath=//div[@id="vulnerability-table-pagination-top"]`;
-  const toolbarTable = new ToolbarTable(page, "Vulnerability table");
-  await toolbarTable.verifyPagination(parentElem);
-});
-
-Then(
-  "Sorting of {string} Columns Works",
-  async ({ page }, columnHeaders: string) => {
-    const headers = columnHeaders
-      .split(",")
-      .map((column: string) => column.trim());
-    const toolbarTable = new ToolbarTable(page, "Vulnerability table");
-    const vulnTableTopPagination = `xpath=//div[@id="vulnerability-table-pagination-top"]`;
-    await toolbarTable.verifySorting(vulnTableTopPagination, headers);
   },
 );

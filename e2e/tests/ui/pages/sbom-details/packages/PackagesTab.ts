@@ -20,12 +20,27 @@ export class PackagesTab {
     return new PackagesTab(page, detailsPage);
   }
 
+  static async fromCurrentPage(page: Page, sbomName?: string) {
+    const detailsPage = await SbomDetailsPage.fromCurrentPage(page, sbomName);
+    await detailsPage._layout.selectTab("Packages");
+
+    return new PackagesTab(page, detailsPage);
+  }
+
   async getToolbar() {
-    return await Toolbar.build(this._page, "Package toolbar");
+    return await Toolbar.build(this._page, "Package toolbar", {
+      "Filter text": "string",
+      License: "multiSelect",
+    });
   }
 
   async getTable() {
-    return await Table.build(this._page, "Package table");
+    return await Table.build(
+      this._page,
+      "Package table",
+      ["Name", "Version", "Vulnerabilities", "Licenses", "PURLs", "CPEs"],
+      [],
+    );
   }
 
   async getPagination(top: boolean = true) {
